@@ -2,28 +2,30 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
-public class playerController : MonoBehaviour, IDamage, IPickup
+public class playerController : MonoBehaviour, IDamage
 {
     [SerializeField] LayerMask ignoreLayer;
     [SerializeField] CharacterController controller;
 
-    [SerializeField] int HP;
+    [SerializeField] public int HP;
     [SerializeField] int speed;
     [SerializeField] int sprintMod;
     [SerializeField] int jumpSpeed;
     [SerializeField] int jumpMax;
     [SerializeField] int gravity;
 
-    [SerializeField] List<gunStats> gunList = new List<gunStats>();
+    [SerializeField] List<Item> inv = new List<Item>();
     [SerializeField] GameObject gunModel;
+    [SerializeField] GameObject itemModel;
     [SerializeField] int shootDamage;
     [SerializeField] int shootDist;
     [SerializeField] float shootRate;
 
     // helpers
     int jumpCount;
-    int gunListPos;
+    int invPos;
     float shootTimer;
+    float healTimer;
     Vector3 moveDir;
     Vector3 playerVel;
 
@@ -76,12 +78,34 @@ public class playerController : MonoBehaviour, IDamage, IPickup
         // shoot timer
         shootTimer += Time.deltaTime;
         if (Input.GetButton("Fire1") &&
-            gunList.Count > 0 &&
-            gunList[gunListPos].ammoCur > 0 &&
-            shootTimer >= shootRate)
-        { shoot(); }
+            inv.Count > 0)
+        {
+            // SWITCH
+            Item item = inv[invPos];
+            if (item is Gun)
+            {
+                // cast item as gun
+                Gun gun = (Gun)item;
+                // check ammo and timer
+                if (gun.ammoCur > 0 &&
+                   shootTimer >= shootRate)
+                { shoot(gun); } // SHOOT
+            }
+            else if (item is Heal)
+            {
+                // cast item as heal
+                Heal heal = (Heal)item;
+                healPlayer(heal.instantAmt, heal.hotAmt, heal.sec);
+            }
+            else if (item is Trap)
+            {
+                // cast item as trap
+                Trap trap = (Trap)item;
+                placeTrap(trap);
+            }
+        }
 
-        selectGun();
+        selectItem();
         reload();
     }
 
@@ -106,17 +130,17 @@ public class playerController : MonoBehaviour, IDamage, IPickup
         }
     }
 
-    void shoot()
+    void shoot(Gun gun)
     {
         // reset timer
         shootTimer = 0;
-        gunList[gunListPos].ammoCur--;
+        gun.ammoCur--;
         updatePlayerUI();
 
         RaycastHit hit;
         if (Physics.Raycast(Camera.main.transform.position, Camera.main.transform.forward, out hit, shootDist, ~ignoreLayer))
         {
-            Instantiate(gunList[gunListPos].hitEffect, hit.point, Quaternion.identity);
+            Instantiate(gun.hitEffect, hit.point, Quaternion.identity);
 
             IDamage dmg = hit.collider.GetComponent<IDamage>();
             if(dmg != null)
@@ -142,10 +166,18 @@ public class playerController : MonoBehaviour, IDamage, IPickup
     public void updatePlayerUI()
     {
         gamemanager.instance.playerHPBar.fillAmount = (float)HP / origHP;
-        if (gunList.Count > 0)
+
+        if (inv[invPos] is Gun)
         {
-            gamemanager.instance.ammoCur.text = gunList[gunListPos].ammoCur.ToString("F0");
-            gamemanager.instance.ammoMax.text = gunList[gunListPos].ammoMax.ToString("F0");
+            // show ammo
+            gamemanager.instance.ammoCur.text = ((Gun)inv[invPos]).ammoCur.ToString("F0");
+            gamemanager.instance.ammoMax.text = ((Gun)inv[invPos]).ammoMax.ToString("F0");
+        }
+        else
+        {
+            // hide
+            gamemanager.instance.ammoCur.text = "";
+            gamemanager.instance.ammoMax.text = "";
         }
     }
 
@@ -156,47 +188,65 @@ public class playerController : MonoBehaviour, IDamage, IPickup
         gamemanager.instance.playerDamageScreen.SetActive(false);
     }
 
-    public void getGunStats(gunStats gun)
+    public void getItem(Item item)
     {
-        gunList.Add(gun);
-        gunListPos = gunList.Count - 1;
-        changeGun();
+        inv.Add(item);
+        invPos = inv.Count - 1;
+        changeItem(item);
     }
 
-    void selectGun()
+    void selectItem()
     {
-        if (Input.GetAxis("Mouse ScrollWheel") > 0 && gunListPos < gunList.Count - 1)
+        if (Input.GetAxis("Mouse ScrollWheel") > 0 && invPos < inv.Count - 1)
         {
-            gunListPos++;
-            changeGun();
+            invPos++;
+            changeItem(inv[invPos]);
         }
-        else if (Input.GetAxis("Mouse ScrollWheel") < 0 && gunListPos > 0)
+        else if (Input.GetAxis("Mouse ScrollWheel") < 0 && invPos > 0)
         {
-            gunListPos--;
-            changeGun();
+            invPos--;
+            changeItem(inv[invPos]);
         }
     }
 
-    void changeGun()
+    void changeItem(Item item)
     {
-        shootDamage = gunList[gunListPos].shootDmg;
-        shootDist = gunList[gunListPos].shootDist;
-        shootRate = gunList[gunListPos].shootRate;
-
-        // bring gun mesh
-        gunModel.GetComponent<MeshFilter>().sharedMesh = gunList[gunListPos].model.GetComponent<MeshFilter>().sharedMesh;
-        // bring gun material (1) - shader
-        gunModel.GetComponent<MeshRenderer>().sharedMaterial = gunList[gunListPos].model.GetComponent<MeshRenderer>().sharedMaterial;
+        
+        if (item is Gun)
+        {
+            // change shoot stats
+            changeGun((Gun)item);
+            // bring gun mesh
+            gunModel.GetComponent<MeshFilter>().sharedMesh = item.model.GetComponent<MeshFilter>().sharedMesh;
+            // bring gun material (1) - shader
+            gunModel.GetComponent<MeshRenderer>().sharedMaterial = item.model.GetComponent<MeshRenderer>().sharedMaterial;
+        } else
+        {
+            // bring gun mesh
+            itemModel.GetComponent<MeshFilter>().sharedMesh = item.model.GetComponent<MeshFilter>().sharedMesh;
+            // bring gun material (1) - shader
+            itemModel.GetComponent<MeshRenderer>().sharedMaterial = item.model.GetComponent<MeshRenderer>().sharedMaterial;
+        }
 
         updatePlayerUI();
+    }
+    void changeGun(Gun gun)
+    {
+        shootDamage = gun.shootDmg;
+        shootDist = gun.shootDist;
+        shootRate = gun.shootRate;
     }
 
     void reload()
     {
-        if(Input.GetButtonDown("Reload") && gunList.Count > 0 && gunList[gunListPos].ammoCur != gunList[gunListPos].ammoMax)
+        if(Input.GetButtonDown("Reload") && inv.Count > 0 && inv[invPos] is Gun)
         {
-            gunList[gunListPos].ammoCur = gunList[gunListPos].ammoMax;
-            updatePlayerUI();
+            Gun gun = (Gun)inv[invPos];
+            if(gun.ammoCur != gun.ammoMax)
+            {
+                gun.ammoCur = gun.ammoMax;
+                updatePlayerUI();
+            }
         }
     }
 
@@ -205,5 +255,37 @@ public class playerController : MonoBehaviour, IDamage, IPickup
         controller.transform.position = gamemanager.instance.playerSpawnPos.transform.position;
         HP = origHP;
         updatePlayerUI();
+    }
+
+    void healPlayer(int instantAmt, int hotAmt, int sec)
+    {
+        // instant heal
+        if (HP + instantAmt < origHP)
+            HP += instantAmt;
+        else
+            HP = origHP; // full
+
+        // hot
+        if (hotAmt > 0 && HP != origHP) // not full health
+        {
+            while (sec > 0)
+            {
+                StartCoroutine(healSecond(hotAmt));
+                sec--;
+            }
+        }
+    }
+
+    IEnumerator healSecond(int hotAmt)
+    {
+        yield return new WaitForSeconds(1f);
+        HP += hotAmt;
+    }
+
+    void placeTrap(Trap trap)
+    {
+        // crouch
+        // instantiate trap.trap??
+        // uncrouch
     }
 }
