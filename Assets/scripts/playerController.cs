@@ -2,13 +2,13 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
-public class playerController : MonoBehaviour, IDamage
+public class playerController : MonoBehaviour, IDamage, IPickup, ITrap
 {
     [SerializeField] LayerMask ignoreLayer;
     [SerializeField] CharacterController controller;
 
     [SerializeField] public int HP;
-    [SerializeField] int speed;
+    [SerializeField] float speed;
     [SerializeField] int sprintMod;
     [SerializeField] int jumpSpeed;
     [SerializeField] int jumpMax;
@@ -26,6 +26,11 @@ public class playerController : MonoBehaviour, IDamage
     int invPos;
     float shootTimer;
     float healTimer;
+    float healInterval = 1f;
+    int healCount;
+    int healAmt;
+    bool isTrapped = false;
+    float speedCache;
     Vector3 moveDir;
     Vector3 playerVel;
 
@@ -36,6 +41,7 @@ public class playerController : MonoBehaviour, IDamage
     void Start()
     {
         origHP = HP;
+        speedCache = speed;
         spawnPlayer();
     }
 
@@ -47,6 +53,8 @@ public class playerController : MonoBehaviour, IDamage
         if(!gamemanager.instance.isPaused)
         {
             movement();
+
+            healTick();
         }
 
         sprint();
@@ -75,8 +83,9 @@ public class playerController : MonoBehaviour, IDamage
         // move again
         controller.Move(playerVel * Time.deltaTime);
 
-        // shoot timer
+        // timer updates
         shootTimer += Time.deltaTime;
+        // fire is pressed
         if (Input.GetButton("Fire1") &&
             inv.Count > 0)
         {
@@ -95,13 +104,13 @@ public class playerController : MonoBehaviour, IDamage
             {
                 // cast item as heal
                 Heal heal = (Heal)item;
-                healPlayer(heal.instantAmt, heal.hotAmt, heal.sec);
+                useHealItem(heal.instantAmt, heal.hotAmt, heal.sec);
             }
             else if (item is Trap)
             {
                 // cast item as trap
                 Trap trap = (Trap)item;
-                placeTrap(trap);
+                if(controller.isGrounded) placeTrap(trap);
             }
         }
 
@@ -163,11 +172,42 @@ public class playerController : MonoBehaviour, IDamage
         }
     }
 
+    void healTick()
+    {
+        // update timer
+        healTimer += Time.deltaTime;
+
+        if (healTimer >= healInterval && // heal once per second?
+            healCount > 0 &&        // ticks left
+            HP + healAmt < origHP) // not full health
+        {
+            // heal
+            HP += healAmt;
+            // ticks--
+            healCount--;
+            Debug.Log(healCount);
+            // reset timer
+            healTimer = 0;
+        }
+
+        // full health
+        if (HP + healAmt > origHP)
+        {
+            HP = origHP; // full
+            // stop hot - done healing
+            healAmt = 0;
+            healCount = 0;
+        }
+
+        updatePlayerUI(); // update UI
+    }
+
     public void updatePlayerUI()
     {
         gamemanager.instance.playerHPBar.fillAmount = (float)HP / origHP;
+        gamemanager.instance.promptTrap.SetActive(isTrapped);
 
-        if (inv[invPos] is Gun)
+        if (inv.Count > 0 && inv[invPos] is Gun)
         {
             // show ammo
             gamemanager.instance.ammoCur.text = ((Gun)inv[invPos]).ammoCur.ToString("F0");
@@ -190,6 +230,7 @@ public class playerController : MonoBehaviour, IDamage
 
     public void getItem(Item item)
     {
+        Debug.Log("getitem");
         inv.Add(item);
         invPos = inv.Count - 1;
         changeItem(item);
@@ -211,9 +252,15 @@ public class playerController : MonoBehaviour, IDamage
 
     void changeItem(Item item)
     {
-        
+        // clear hands
+        gunModel.GetComponent<MeshFilter>().sharedMesh = null;
+        gunModel.GetComponent<MeshRenderer>().sharedMaterial = null;
+        itemModel.GetComponent<MeshFilter>().sharedMesh = null;
+        itemModel.GetComponent<MeshRenderer>().sharedMaterial = null;
+
         if (item is Gun)
         {
+            Debug.Log("changeitem: item is gun");
             // change shoot stats
             changeGun((Gun)item);
             // bring gun mesh
@@ -222,10 +269,14 @@ public class playerController : MonoBehaviour, IDamage
             gunModel.GetComponent<MeshRenderer>().sharedMaterial = item.model.GetComponent<MeshRenderer>().sharedMaterial;
         } else
         {
-            // bring gun mesh
+            Debug.Log("changeitem: item is NOT gun");
+
+            // bring mesh
             itemModel.GetComponent<MeshFilter>().sharedMesh = item.model.GetComponent<MeshFilter>().sharedMesh;
-            // bring gun material (1) - shader
+            // bring material (1) - shader
             itemModel.GetComponent<MeshRenderer>().sharedMaterial = item.model.GetComponent<MeshRenderer>().sharedMaterial;
+            // match scale
+            itemModel.transform.localScale = item.model.transform.localScale;
         }
 
         updatePlayerUI();
@@ -257,35 +308,57 @@ public class playerController : MonoBehaviour, IDamage
         updatePlayerUI();
     }
 
-    void healPlayer(int instantAmt, int hotAmt, int sec)
+    void useHealItem(int instantAmt, int hotAmt = 0, int sec = 1)
     {
-        // instant heal
+        // instant heal - doesn't count for HOT
         if (HP + instantAmt < origHP)
             HP += instantAmt;
         else
             HP = origHP; // full
 
         // hot
-        if (hotAmt > 0 && HP != origHP) // not full health
+        if (hotAmt > 0 && HP < origHP) // not full health
         {
-            while (sec > 0)
-            {
-                StartCoroutine(healSecond(hotAmt));
-                sec--;
-            }
+            // reset all hot vars
+            // any previous hot is lost
+            // can be fixed with heal queue of ints for amount
+            healCount = sec;
+            healAmt = hotAmt;
         }
-    }
 
-    IEnumerator healSecond(int hotAmt)
-    {
-        yield return new WaitForSeconds(1f);
-        HP += hotAmt;
+        // empty hands
+        itemModel.GetComponent<MeshFilter>().sharedMesh = null;
+        itemModel.GetComponent<MeshRenderer>().sharedMaterial = null;
+        // remove from inv
+        inv.Remove(inv[invPos]);
+        invPos = inv.Count - 1;
     }
 
     void placeTrap(Trap trap)
     {
-        // crouch
+        // place trap at player pos
+        Vector3 trapPos = transform.position;
+        // change y to 0
+        trapPos.y = 0;
         // instantiate trap.trap??
-        // uncrouch
+        Instantiate(trap.trapToSet, trapPos, Quaternion.identity);
+
+        // empty hands
+        itemModel.GetComponent<MeshFilter>().sharedMesh = null;
+        itemModel.GetComponent<MeshRenderer>().sharedMaterial = null;
+        // remove from inv
+        inv.Remove(inv[invPos]);
+        invPos = inv.Count - 1;
+    }
+
+    public IEnumerator trap(float speedMult, int duration)
+    {
+        isTrapped = true;
+        updatePlayerUI();
+        speed *= speedMult; // apply speed mult
+        yield return new WaitForSeconds(duration);
+        speed = speedCache; // unapply speed mult
+        isTrapped = false;
+        updatePlayerUI();
     }
 }

@@ -4,5 +4,5 @@ using UnityEngine;
 
 public class Trap : Item
 {
-    public TrapSet trapSet;
+    public GameObject trapToSet;
 }

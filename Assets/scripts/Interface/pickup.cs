@@ -6,6 +6,7 @@ public class pickup : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        Debug.Log("ontriggerenter");
         IPickup canPickup = other.GetComponent<IPickup>();
         if(canPickup != null )
         {
@@ -15,8 +16,9 @@ public class pickup : MonoBehaviour
                 Gun gun = (Gun)item;
                 gun.ammoCur = gun.ammoMax;
                 gamemanager.instance.playerScript.updatePlayerUI();
-                Destroy(gameObject);
             }
+
+            Destroy(gameObject); // destroy model in scene
         }
     }
 }

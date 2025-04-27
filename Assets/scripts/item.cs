@@ -5,7 +5,6 @@ public class Item : ScriptableObject
 {
     [SerializeField] public GameObject model;
     [SerializeField] public Sprite itemIcon;
-    [SerializeField] public ItemType itemType;
 
     public ParticleSystem hitEffect;
     public AudioClip[] sound;

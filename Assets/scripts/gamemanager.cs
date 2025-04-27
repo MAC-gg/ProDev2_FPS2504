@@ -11,10 +11,11 @@ public class gamemanager : MonoBehaviour
     [SerializeField] GameObject menuWin;
     [SerializeField] GameObject menuLose;
     [SerializeField] TMP_Text goalCountText;
-    
+
     public TMP_Text ammoCur, ammoMax;
     public Image playerHPBar;
     public GameObject playerDamageScreen;
+    public GameObject promptTrap;
 
     public GameObject playerSpawnPos;
     public GameObject player;
