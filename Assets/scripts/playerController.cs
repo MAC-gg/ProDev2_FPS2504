@@ -338,8 +338,8 @@ public class playerController : MonoBehaviour, IDamage, IPickup, ITrap
     {
         // place trap at player pos
         Vector3 trapPos = transform.position;
-        // change y to 0
-        trapPos.y = 0;
+        // change y to 0.075 according to model dimensions
+        trapPos.y = 0.075f;
         // instantiate trap.trap??
         Instantiate(trap.trapToSet, trapPos, Quaternion.identity);
 

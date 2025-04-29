@@ -10,10 +10,3 @@ public class Item : ScriptableObject
     public AudioClip[] sound;
     [Range(0, 1)] public float soundVol;
 }
-
-public enum ItemType
-{
-    Gun,
-    Heal,
-    Trap
-}

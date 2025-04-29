@@ -47,10 +47,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd4b811ac42a18242930ba9b92b8e359, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  model: {fileID: 1863641626424685205}
   type: 2
   speedMult: 0
   trapDurationSeconds: 5
   trapResetSeconds: 2
+  curState: 0
 --- !u!33 &2564157211571623613
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -81,8 +83,7 @@ MeshRenderer:
   m_SmallMeshCulling: 1
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: 38a0c75b0548c844b952f8bf781a8c58, type: 2}
+  m_Materials: []
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
